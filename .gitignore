@@ -1,0 +1,28 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Node / package managers
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Temporary debug artifacts
+.tmp-pw/
+.chrome-debug/
+.edge-debug/
+.dump.html
+.chrome-shot*.png
+
+# Local environment files
+.env
+.env.*
+
+# Build or cache directories
+dist/
+build/
+.cache/
+coverage/

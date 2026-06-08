@@ -1,10 +1,14 @@
+// BEGIN constants.js
 const DB_NAME = "prompt-manager-db";
 const DB_VERSION = 1;
 const STORE_NAME = "gallery_items";
 const STORAGE_KEY = "prompt-manager.gallery.v4";
 const METADATA_SLICE_BYTES = 1024 * 1024;
 const IMPORT_CONCURRENCY = Math.min(64, Math.max(8, (navigator.hardwareConcurrency || 8) * 2));
+const SCROLL_MASK_SELECTORS = [".workspace", ".tag-filter-scroll", ".viewer-media", ".viewer-info", ".editor-panel"];
+// END constants.js
 
+// BEGIN elements.js
 const elements = {
   assetCount: document.getElementById("assetCount"),
   favoriteCount: document.getElementById("favoriteCount"),
@@ -56,7 +60,9 @@ const elements = {
   resetDemoButton: document.getElementById("resetDemoButton"),
   galleryItemTemplate: document.getElementById("galleryItemTemplate"),
 };
+// END elements.js
 
+// BEGIN appState.js
 const state = {
   items: [],
   selectedId: null,
@@ -73,44 +79,10 @@ const state = {
   draftMetadata: null,
   isInitialized: false,
 };
+// END appState.js
 
-let dbPromise = null;
+// BEGIN objectUrls.js
 const objectUrlMap = new Map();
-
-function openDatabase() {
-  if (dbPromise) {
-    return dbPromise;
-  }
-
-  dbPromise = new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
-    request.onupgradeneeded = () => {
-      const db = request.result;
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        db.createObjectStore(STORE_NAME, { keyPath: "id" });
-      }
-    };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error || new Error("Failed to open IndexedDB"));
-  });
-
-  return dbPromise;
-}
-
-function requestToPromise(request) {
-  return new Promise((resolve, reject) => {
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error || new Error("IndexedDB request failed"));
-  });
-}
-
-function transactionDone(transaction) {
-  return new Promise((resolve, reject) => {
-    transaction.oncomplete = () => resolve();
-    transaction.onerror = () => reject(transaction.error || new Error("IndexedDB transaction failed"));
-    transaction.onabort = () => reject(transaction.error || new Error("IndexedDB transaction aborted"));
-  });
-}
 
 function revokeObjectUrl(id) {
   const existing = objectUrlMap.get(id);
@@ -125,6 +97,124 @@ function createObjectUrl(id, blob) {
   const objectUrl = URL.createObjectURL(blob);
   objectUrlMap.set(id, objectUrl);
   return objectUrl;
+}
+
+function revokeAllObjectUrls() {
+  objectUrlMap.forEach((url) => URL.revokeObjectURL(url));
+  objectUrlMap.clear();
+}
+// END objectUrls.js
+
+// BEGIN scrollbarMasks.js
+let scrollbarMaskFrame = 0;
+
+function createScrollbarMask(position) {
+  const mask = document.createElement("span");
+  mask.className = `scrollbar-arrow-mask ${position}`;
+  mask.setAttribute("aria-hidden", "true");
+  return mask;
+}
+
+function syncScrollbarMask(container) {
+  if (!(container instanceof HTMLElement)) {
+    return;
+  }
+
+  const scrollbarWidth = Math.max(container.offsetWidth - container.clientWidth, 0);
+  const hasVerticalScrollbar = container.scrollHeight > container.clientHeight + 1 && scrollbarWidth > 0;
+  let topMask = container.querySelector(".scrollbar-arrow-mask.top");
+  let bottomMask = container.querySelector(".scrollbar-arrow-mask.bottom");
+
+  if (!topMask) {
+    topMask = createScrollbarMask("top");
+    container.appendChild(topMask);
+  }
+  if (!bottomMask) {
+    bottomMask = createScrollbarMask("bottom");
+    container.appendChild(bottomMask);
+  }
+
+  if (!hasVerticalScrollbar) {
+    topMask.hidden = true;
+    bottomMask.hidden = true;
+    return;
+  }
+
+  const maskSize = `${scrollbarWidth}px`;
+  container.classList.add("scrollbar-mask-host");
+  container.style.setProperty("--scrollbar-mask-width", maskSize);
+  container.style.setProperty("--scrollbar-mask-height", maskSize);
+  topMask.hidden = false;
+  bottomMask.hidden = false;
+}
+
+function syncScrollbarMasks() {
+  SCROLL_MASK_SELECTORS.forEach((selector) => {
+    document.querySelectorAll(selector).forEach((element) => {
+      syncScrollbarMask(element);
+    });
+  });
+}
+
+function queueScrollbarMaskSync() {
+  if (scrollbarMaskFrame) {
+    return;
+  }
+
+  scrollbarMaskFrame = window.requestAnimationFrame(() => {
+    scrollbarMaskFrame = 0;
+    syncScrollbarMasks();
+  });
+}
+// END scrollbarMasks.js
+
+// BEGIN item.js
+function stringifyValue(value) {
+  if (value === undefined || value === null) {
+    return "";
+  }
+  return String(value).trim();
+}
+
+function sanitizeTag(tag) {
+  const cleaned = String(tag || "")
+    .replace(/<[^>]+>/g, "")
+    .replace(/[\[\]()]/g, "")
+    .replace(/:\s*-?\d+(\.\d+)?/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!cleaned || cleaned.length > 64) {
+    return "";
+  }
+  return cleaned;
+}
+
+function inferTags(promptText) {
+  const tokens = String(promptText || "")
+    .split(/[\n,]/)
+    .map((part) => sanitizeTag(part))
+    .filter(Boolean);
+
+  const unique = [];
+  const seen = new Set();
+  tokens.forEach((token) => {
+    const key = token.toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      unique.push(token);
+    }
+  });
+  return unique.slice(0, 18);
+}
+
+function stripExtension(fileName) {
+  return String(fileName || "").replace(/\.[^.]+$/, "");
+}
+
+function titleFromFileName(fileName) {
+  const base = stripExtension(fileName).replace(/[_-]+/g, " ").trim();
+  return base || "Untitled";
 }
 
 function normalizeItem(item) {
@@ -161,12 +251,90 @@ function normalizeItem(item) {
     workflowRaw: String(item.workflowRaw || "").trim(),
   };
 }
+// END item.js
 
-function stringifyValue(value) {
-  if (value === undefined || value === null) {
-    return "";
+// BEGIN helpers.js
+function isSupportedImageFile(file) {
+  if (!file) {
+    return false;
   }
-  return String(value).trim();
+  if (file.type && file.type.startsWith("image/")) {
+    return true;
+  }
+  return /\.(png|jpe?g|webp)$/i.test(file.name || "");
+}
+
+function escapeHtml(text) {
+  return String(text)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+async function mapConcurrent(items, limit, mapper, onProgress) {
+  const results = new Array(items.length);
+  let index = 0;
+  let completed = 0;
+
+  async function worker() {
+    while (true) {
+      const current = index;
+      index += 1;
+      if (current >= items.length) {
+        return;
+      }
+      results[current] = await mapper(items[current], current);
+      completed += 1;
+      if (onProgress) {
+        onProgress(completed, items.length);
+      }
+    }
+  }
+
+  const workerCount = Math.min(limit, items.length);
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+  return results;
+}
+// END helpers.js
+
+// BEGIN database.js
+let dbPromise = null;
+
+function openDatabase() {
+  if (dbPromise) {
+    return dbPromise;
+  }
+
+  dbPromise = new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, DB_VERSION);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME, { keyPath: "id" });
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error || new Error("Failed to open IndexedDB"));
+  });
+
+  return dbPromise;
+}
+
+function requestToPromise(request) {
+  return new Promise((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error || new Error("IndexedDB request failed"));
+  });
+}
+
+function transactionDone(transaction) {
+  return new Promise((resolve, reject) => {
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error || new Error("IndexedDB transaction failed"));
+    transaction.onabort = () => reject(transaction.error || new Error("IndexedDB transaction aborted"));
+  });
 }
 
 function toDbRecord(item) {
@@ -195,12 +363,11 @@ function toDbRecord(item) {
 }
 
 function fromDbRecord(record) {
-  const item = normalizeItem({
+  return normalizeItem({
     ...record,
     image: record.imageBlob ? createObjectUrl(record.id, record.imageBlob) : "",
     imageBlob: record.imageBlob || null,
   });
-  return item;
 }
 
 async function loadState() {
@@ -245,416 +412,9 @@ async function clearDatabase() {
   transaction.objectStore(STORE_NAME).clear();
   await transactionDone(transaction);
 }
+// END database.js
 
-function setImportStatus(message) {
-  elements.importStatus.textContent = message;
-}
-
-function isSupportedImageFile(file) {
-  if (!file) {
-    return false;
-  }
-  if (file.type && file.type.startsWith("image/")) {
-    return true;
-  }
-  return /\.(png|jpe?g|webp)$/i.test(file.name || "");
-}
-
-function escapeHtml(text) {
-  return String(text)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
-}
-
-function getAllTags() {
-  return [...new Set(state.items.flatMap((item) => item.tags))].sort((a, b) => a.localeCompare(b));
-}
-
-function getAllModels() {
-  return [...new Set(state.items.map((item) => item.model).filter(Boolean))].sort((a, b) => a.localeCompare(b));
-}
-
-function getAllSources() {
-  return [...new Set(state.items.map((item) => item.sourceType).filter(Boolean))].sort((a, b) => a.localeCompare(b));
-}
-
-function getFilteredItems() {
-  const query = state.searchQuery.trim().toLowerCase();
-  return state.items
-    .filter((item) => {
-      if (state.activeTag !== "all" && !item.tags.includes(state.activeTag)) {
-        return false;
-      }
-      if (state.sourceFilter !== "all" && item.sourceType !== state.sourceFilter) {
-        return false;
-      }
-      if (state.modelFilter !== "all" && item.model !== state.modelFilter) {
-        return false;
-      }
-      if (state.favoriteFilter === "favorites" && !item.favorite) {
-        return false;
-      }
-      if (state.favoriteFilter === "others" && item.favorite) {
-        return false;
-      }
-      if (!query) {
-        return true;
-      }
-
-      const haystack = [
-        item.title,
-        item.prompt,
-        item.negativePrompt,
-        item.model,
-        item.notes,
-        item.sourceType,
-        item.filename,
-        item.sampler,
-        item.scheduler,
-        item.steps,
-        item.seed,
-        ...item.tags,
-      ]
-        .join(" ")
-        .toLowerCase();
-
-      return haystack.includes(query);
-    })
-    .sort((left, right) => {
-      if (state.sortOrder === "oldest") {
-        return new Date(left.createdAt) - new Date(right.createdAt);
-      }
-      if (state.sortOrder === "favorites") {
-        if (left.favorite === right.favorite) {
-          return new Date(right.createdAt) - new Date(left.createdAt);
-        }
-        return Number(right.favorite) - Number(left.favorite);
-      }
-      if (state.sortOrder === "title") {
-        return left.title.localeCompare(right.title);
-      }
-      return new Date(right.createdAt) - new Date(left.createdAt);
-    });
-}
-
-function getSelectedItem() {
-  return state.items.find((item) => item.id === state.selectedId) || null;
-}
-
-function renderSelect(select, currentValue, defaultLabel, values) {
-  select.innerHTML = "";
-
-  const allOption = document.createElement("option");
-  allOption.value = "all";
-  allOption.textContent = defaultLabel;
-  select.appendChild(allOption);
-
-  values.forEach((value) => {
-    const option = document.createElement("option");
-    option.value = value;
-    option.textContent = value;
-    select.appendChild(option);
-  });
-
-  select.value = values.includes(currentValue) ? currentValue : "all";
-}
-
-function renderTagFilters() {
-  const tags = getAllTags();
-  elements.tagFilters.innerHTML = "";
-
-  const allButton = document.createElement("button");
-  allButton.type = "button";
-  allButton.className = `chip${state.activeTag === "all" ? " active" : ""}`;
-  allButton.textContent = "全部";
-  allButton.addEventListener("click", () => {
-    state.activeTag = "all";
-    render();
-  });
-  elements.tagFilters.appendChild(allButton);
-
-  tags.forEach((tag) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = `chip${state.activeTag === tag ? " active" : ""}`;
-    button.textContent = tag;
-    button.addEventListener("click", () => {
-      state.activeTag = tag;
-      render();
-    });
-    elements.tagFilters.appendChild(button);
-  });
-}
-
-function renderFilters() {
-  renderSelect(elements.sourceFilter, state.sourceFilter, "全部来源", getAllSources());
-  state.sourceFilter = elements.sourceFilter.value;
-
-  renderSelect(elements.modelFilter, state.modelFilter, "全部模型", getAllModels());
-  state.modelFilter = elements.modelFilter.value;
-}
-
-function renderStats() {
-  elements.assetCount.textContent = String(state.items.length);
-  elements.favoriteCount.textContent = String(state.items.filter((item) => item.favorite).length);
-  elements.modelCount.textContent = String(getAllModels().length);
-}
-
-function renderGallery() {
-  const filteredItems = getFilteredItems();
-  elements.galleryGrid.innerHTML = "";
-  elements.emptyState.hidden = filteredItems.length > 0;
-  elements.resultSummary.textContent = `${filteredItems.length} 个结果`;
-
-  if (!filteredItems.some((item) => item.id === state.selectedId)) {
-    state.selectedId = filteredItems[0]?.id || state.items[0]?.id || null;
-  }
-
-  filteredItems.forEach((item, index) => {
-    const node = elements.galleryItemTemplate.content.firstElementChild.cloneNode(true);
-    node.style.setProperty("--delay", `${index * 8}ms`);
-    node.classList.toggle("selected", item.id === state.selectedId);
-    node.dataset.id = item.id;
-    node.querySelector(".gallery-thumb").style.backgroundImage = item.image ? `url("${item.image}")` : "";
-    node.querySelector(".gallery-model").textContent = `${item.sourceType} · ${item.model}`;
-    node.querySelector(".gallery-title").textContent = item.title;
-    node.querySelector(".gallery-tags").textContent = item.tags.slice(0, 3).join(" · ") || "无 TAG";
-    node.querySelector(".gallery-favorite").style.visibility = item.favorite ? "visible" : "hidden";
-    node.addEventListener("click", () => openViewer(item.id));
-    elements.galleryGrid.appendChild(node);
-  });
-}
-
-function renderTagCloud(tags) {
-  if (!tags.length) {
-    return '<p class="detail-copy">未提取到 TAG</p>';
-  }
-  return `<div class="tag-cloud">${tags
-    .map((tag) => `<span class="tag-pill">${escapeHtml(tag)}</span>`)
-    .join("")}</div>`;
-}
-
-function renderParameterGrid(item) {
-  const entries = [
-    ["Source", item.sourceType || "Unknown"],
-    ["Filename", item.filename || "未记录"],
-    ["Model", item.model || "Unknown"],
-    ["Size", item.size || "未记录"],
-    ["Sampler", item.sampler || "未记录"],
-    ["Scheduler", item.scheduler || "未记录"],
-    ["Steps", item.steps || "未记录"],
-    ["CFG", item.cfg || "未记录"],
-    ["Seed", item.seed || "未记录"],
-  ];
-
-  return `<div class="parameter-grid">${entries
-    .map(
-      ([label, value]) => `
-        <div class="parameter-card">
-          <strong>${escapeHtml(label)}</strong>
-          <p>${escapeHtml(value)}</p>
-        </div>
-      `
-    )
-    .join("")}</div>`;
-}
-
-function renderDetail() {
-  const selected = getSelectedItem();
-  if (!selected) {
-    elements.previewImage.style.backgroundImage = "";
-    elements.detailPanel.innerHTML = '<p class="detail-copy">请选择一张图片查看详情。</p>';
-    elements.favoriteToggleButton.disabled = true;
-    return;
-  }
-
-  elements.favoriteToggleButton.disabled = false;
-  elements.favoriteToggleButton.textContent = selected.favorite ? "取消收藏" : "收藏";
-  elements.previewImage.style.backgroundImage = selected.image ? `url("${selected.image}")` : "";
-
-  const rawMetadataBlock = selected.metadataRaw
-    ? `
-      <details class="metadata-raw">
-        <summary>Raw Metadata</summary>
-        <pre>${escapeHtml(selected.metadataRaw)}</pre>
-      </details>
-    `
-    : "";
-
-  const workflowBlock = selected.workflowRaw
-    ? `
-      <details class="metadata-raw">
-        <summary>Workflow</summary>
-        <pre>${escapeHtml(selected.workflowRaw)}</pre>
-      </details>
-    `
-    : "";
-
-  elements.detailPanel.innerHTML = `
-    <h3 id="viewerTitle">${escapeHtml(selected.title)}</h3>
-    <div class="detail-meta">
-      <span>${escapeHtml(selected.sourceType || "Unknown")}</span>
-      <span>${escapeHtml(selected.model || "Unknown")}</span>
-      <span>${escapeHtml(selected.size || "未填写尺寸")}</span>
-      <span>${new Date(selected.createdAt).toLocaleDateString("zh-CN")}</span>
-    </div>
-    <div class="prompt-block">
-      <strong>Prompt</strong>
-      <p>${escapeHtml(selected.prompt || "未提取到 Prompt")}</p>
-    </div>
-    <div class="prompt-block">
-      <strong>Negative Prompt</strong>
-      <p>${escapeHtml(selected.negativePrompt || "未提取到 Negative Prompt")}</p>
-    </div>
-    <div class="prompt-block">
-      <strong>Tags</strong>
-      ${renderTagCloud(selected.tags)}
-    </div>
-    ${renderParameterGrid(selected)}
-    <p class="detail-copy">${escapeHtml(selected.notes || "暂无备注")}</p>
-    ${rawMetadataBlock}
-    ${workflowBlock}
-  `;
-}
-
-function render() {
-  renderStats();
-  renderTagFilters();
-  renderFilters();
-  renderGallery();
-  if (state.viewerOpen) {
-    renderDetail();
-    elements.viewerModal.hidden = false;
-  } else {
-    elements.viewerModal.hidden = true;
-  }
-}
-
-function openViewer(id) {
-  if (id) {
-    state.selectedId = id;
-  }
-  if (!state.selectedId) {
-    return;
-  }
-  state.viewerOpen = true;
-  elements.viewerModal.hidden = false;
-  document.body.style.overflow = "hidden";
-  render();
-}
-
-function closeViewer() {
-  state.viewerOpen = false;
-  elements.viewerModal.hidden = true;
-  document.body.style.overflow = state.editorOpen ? "hidden" : "";
-}
-
-function resetDraftState() {
-  if (state.draftObjectUrl) {
-    URL.revokeObjectURL(state.draftObjectUrl);
-    state.draftObjectUrl = "";
-  }
-  state.draftBlob = null;
-  state.draftMetadata = null;
-}
-
-function refreshUploadPreview(image) {
-  if (image) {
-    elements.uploadPreview.style.backgroundImage = `url("${image}")`;
-    elements.uploadPreview.textContent = "";
-  } else {
-    elements.uploadPreview.style.backgroundImage = "";
-    elements.uploadPreview.textContent = "暂无预览";
-  }
-}
-
-function populateForm(item) {
-  if (!item) {
-    elements.formHeading.textContent = "新增作品";
-    elements.entryId.value = "";
-    elements.entryForm.reset();
-    resetDraftState();
-    refreshUploadPreview("");
-    return;
-  }
-
-  elements.formHeading.textContent = "编辑作品";
-  elements.entryId.value = item.id;
-  elements.titleInput.value = item.title;
-  elements.imageUrlInput.value = item.imageBlob ? "" : item.image;
-  elements.promptInput.value = item.prompt;
-  elements.negativePromptInput.value = item.negativePrompt;
-  elements.modelInput.value = item.model === "Unknown" ? "" : item.model;
-  elements.sizeInput.value = item.size;
-  elements.tagsInput.value = item.tags.join(", ");
-  elements.notesInput.value = item.notes;
-  resetDraftState();
-  state.draftBlob = item.imageBlob || null;
-  state.draftMetadata = item;
-  refreshUploadPreview(item.image);
-}
-
-function openEditor(item = null) {
-  state.editorOpen = true;
-  elements.editorPanel.hidden = false;
-  document.body.style.overflow = "hidden";
-  populateForm(item);
-}
-
-function closeEditor() {
-  state.editorOpen = false;
-  elements.editorPanel.hidden = true;
-  elements.entryForm.reset();
-  elements.entryId.value = "";
-  resetDraftState();
-  refreshUploadPreview("");
-  document.body.style.overflow = state.viewerOpen ? "hidden" : "";
-}
-
-function inferTags(promptText) {
-  const tokens = String(promptText || "")
-    .split(/[\n,]/)
-    .map((part) => sanitizeTag(part))
-    .filter(Boolean);
-
-  const unique = [];
-  const seen = new Set();
-  tokens.forEach((token) => {
-    const key = token.toLowerCase();
-    if (!seen.has(key)) {
-      seen.add(key);
-      unique.push(token);
-    }
-  });
-  return unique.slice(0, 18);
-}
-
-function sanitizeTag(tag) {
-  const cleaned = String(tag || "")
-    .replace(/<[^>]+>/g, "")
-    .replace(/[\[\]()]/g, "")
-    .replace(/:\s*-?\d+(\.\d+)?/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  if (!cleaned || cleaned.length > 64) {
-    return "";
-  }
-  return cleaned;
-}
-
-function stripExtension(fileName) {
-  return String(fileName || "").replace(/\.[^.]+$/, "");
-}
-
-function titleFromFileName(fileName) {
-  const base = stripExtension(fileName).replace(/[_-]+/g, " ").trim();
-  return base || "Untitled";
-}
-
+// BEGIN metadata.js
 function decodeBytes(bytes, encoding = "utf-8") {
   try {
     return new TextDecoder(encoding).decode(bytes);
@@ -685,13 +445,7 @@ function safeJsonParse(text) {
 }
 
 function isPng(bytes) {
-  return (
-    bytes.length > 8 &&
-    bytes[0] === 0x89 &&
-    bytes[1] === 0x50 &&
-    bytes[2] === 0x4e &&
-    bytes[3] === 0x47
-  );
+  return bytes.length > 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47;
 }
 
 function isJpeg(bytes) {
@@ -1218,30 +972,366 @@ async function createItemFromFile(file) {
     createdAt: new Date(file.lastModified || Date.now()).toISOString(),
   });
 }
+// END metadata.js
 
-async function mapConcurrent(items, limit, mapper, onProgress) {
-  const results = new Array(items.length);
-  let index = 0;
-  let completed = 0;
+// BEGIN render.js
+let openViewerHandler = () => {};
 
-  async function worker() {
-    while (true) {
-      const current = index;
-      index += 1;
-      if (current >= items.length) {
-        return;
+function setOpenViewerHandler(handler) {
+  openViewerHandler = typeof handler === "function" ? handler : () => {};
+}
+
+function getAllTags() {
+  return [...new Set(state.items.flatMap((item) => item.tags))].sort((a, b) => a.localeCompare(b));
+}
+
+function getAllModels() {
+  return [...new Set(state.items.map((item) => item.model).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+}
+
+function getAllSources() {
+  return [...new Set(state.items.map((item) => item.sourceType).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+}
+
+function getFilteredItems() {
+  const query = state.searchQuery.trim().toLowerCase();
+  return state.items
+    .filter((item) => {
+      if (state.activeTag !== "all" && !item.tags.includes(state.activeTag)) {
+        return false;
       }
-      results[current] = await mapper(items[current], current);
-      completed += 1;
-      if (onProgress) {
-        onProgress(completed, items.length);
+      if (state.sourceFilter !== "all" && item.sourceType !== state.sourceFilter) {
+        return false;
       }
-    }
+      if (state.modelFilter !== "all" && item.model !== state.modelFilter) {
+        return false;
+      }
+      if (state.favoriteFilter === "favorites" && !item.favorite) {
+        return false;
+      }
+      if (state.favoriteFilter === "others" && item.favorite) {
+        return false;
+      }
+      if (!query) {
+        return true;
+      }
+
+      const haystack = [
+        item.title,
+        item.prompt,
+        item.negativePrompt,
+        item.model,
+        item.notes,
+        item.sourceType,
+        item.filename,
+        item.sampler,
+        item.scheduler,
+        item.steps,
+        item.seed,
+        ...item.tags,
+      ]
+        .join(" ")
+        .toLowerCase();
+
+      return haystack.includes(query);
+    })
+    .sort((left, right) => {
+      if (state.sortOrder === "oldest") {
+        return new Date(left.createdAt) - new Date(right.createdAt);
+      }
+      if (state.sortOrder === "favorites") {
+        if (left.favorite === right.favorite) {
+          return new Date(right.createdAt) - new Date(left.createdAt);
+        }
+        return Number(right.favorite) - Number(left.favorite);
+      }
+      if (state.sortOrder === "title") {
+        return left.title.localeCompare(right.title);
+      }
+      return new Date(right.createdAt) - new Date(left.createdAt);
+    });
+}
+
+function getSelectedItem() {
+  return state.items.find((item) => item.id === state.selectedId) || null;
+}
+
+function renderSelect(select, currentValue, defaultLabel, values) {
+  select.innerHTML = "";
+
+  const allOption = document.createElement("option");
+  allOption.value = "all";
+  allOption.textContent = defaultLabel;
+  select.appendChild(allOption);
+
+  values.forEach((value) => {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = value;
+    select.appendChild(option);
+  });
+
+  select.value = values.includes(currentValue) ? currentValue : "all";
+}
+
+function renderTagFilters() {
+  const tags = getAllTags();
+  elements.tagFilters.innerHTML = "";
+
+  const allButton = document.createElement("button");
+  allButton.type = "button";
+  allButton.className = `chip${state.activeTag === "all" ? " active" : ""}`;
+  allButton.textContent = "全部";
+  allButton.addEventListener("click", () => {
+    state.activeTag = "all";
+    render();
+  });
+  elements.tagFilters.appendChild(allButton);
+
+  tags.forEach((tag) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `chip${state.activeTag === tag ? " active" : ""}`;
+    button.textContent = tag;
+    button.addEventListener("click", () => {
+      state.activeTag = tag;
+      render();
+    });
+    elements.tagFilters.appendChild(button);
+  });
+}
+
+function renderFilters() {
+  renderSelect(elements.sourceFilter, state.sourceFilter, "全部来源", getAllSources());
+  state.sourceFilter = elements.sourceFilter.value;
+
+  renderSelect(elements.modelFilter, state.modelFilter, "全部模型", getAllModels());
+  state.modelFilter = elements.modelFilter.value;
+}
+
+function renderStats() {
+  elements.assetCount.textContent = String(state.items.length);
+  elements.favoriteCount.textContent = String(state.items.filter((item) => item.favorite).length);
+  elements.modelCount.textContent = String(getAllModels().length);
+}
+
+function renderGallery() {
+  const filteredItems = getFilteredItems();
+  elements.galleryGrid.innerHTML = "";
+  elements.emptyState.hidden = filteredItems.length > 0;
+  elements.resultSummary.textContent = `${filteredItems.length} 个结果`;
+
+  if (!filteredItems.some((item) => item.id === state.selectedId)) {
+    state.selectedId = filteredItems[0]?.id || state.items[0]?.id || null;
   }
 
-  const workerCount = Math.min(limit, items.length);
-  await Promise.all(Array.from({ length: workerCount }, () => worker()));
-  return results;
+  filteredItems.forEach((item, index) => {
+    const node = elements.galleryItemTemplate.content.firstElementChild.cloneNode(true);
+    node.style.setProperty("--delay", `${index * 8}ms`);
+    node.classList.toggle("selected", item.id === state.selectedId);
+    node.dataset.id = item.id;
+    node.querySelector(".gallery-thumb").style.backgroundImage = item.image ? `url("${item.image}")` : "";
+    node.querySelector(".gallery-model").textContent = `${item.sourceType} · ${item.model}`;
+    node.querySelector(".gallery-title").textContent = item.title;
+    node.querySelector(".gallery-tags").textContent = item.tags.slice(0, 3).join(" · ") || "无 TAG";
+    node.querySelector(".gallery-favorite").style.visibility = item.favorite ? "visible" : "hidden";
+    node.addEventListener("click", () => openViewerHandler(item.id));
+    elements.galleryGrid.appendChild(node);
+  });
+}
+
+function renderTagCloud(tags) {
+  if (!tags.length) {
+    return '<p class="detail-copy">未提取到 TAG</p>';
+  }
+  return `<div class="tag-cloud">${tags.map((tag) => `<span class="tag-pill">${escapeHtml(tag)}</span>`).join("")}</div>`;
+}
+
+function renderParameterGrid(item) {
+  const entries = [
+    ["Source", item.sourceType || "Unknown"],
+    ["Filename", item.filename || "未记录"],
+    ["Model", item.model || "Unknown"],
+    ["Size", item.size || "未记录"],
+    ["Sampler", item.sampler || "未记录"],
+    ["Scheduler", item.scheduler || "未记录"],
+    ["Steps", item.steps || "未记录"],
+    ["CFG", item.cfg || "未记录"],
+    ["Seed", item.seed || "未记录"],
+  ];
+
+  return `<div class="parameter-grid">${entries
+    .map(
+      ([label, value]) => `
+        <div class="parameter-card">
+          <strong>${escapeHtml(label)}</strong>
+          <p>${escapeHtml(value)}</p>
+        </div>
+      `
+    )
+    .join("")}</div>`;
+}
+
+function renderDetail() {
+  const selected = getSelectedItem();
+  if (!selected) {
+    elements.previewImage.style.backgroundImage = "";
+    elements.detailPanel.innerHTML = '<p class="detail-copy">请选择一张图片查看详情。</p>';
+    elements.favoriteToggleButton.disabled = true;
+    return;
+  }
+
+  elements.favoriteToggleButton.disabled = false;
+  elements.favoriteToggleButton.textContent = selected.favorite ? "取消收藏" : "收藏";
+  elements.previewImage.style.backgroundImage = selected.image ? `url("${selected.image}")` : "";
+
+  const rawMetadataBlock = selected.metadataRaw
+    ? `
+      <details class="metadata-raw">
+        <summary>Raw Metadata</summary>
+        <pre>${escapeHtml(selected.metadataRaw)}</pre>
+      </details>
+    `
+    : "";
+
+  const workflowBlock = selected.workflowRaw
+    ? `
+      <details class="metadata-raw">
+        <summary>Workflow</summary>
+        <pre>${escapeHtml(selected.workflowRaw)}</pre>
+      </details>
+    `
+    : "";
+
+  elements.detailPanel.innerHTML = `
+    <h3 id="viewerTitle">${escapeHtml(selected.title)}</h3>
+    <div class="detail-meta">
+      <span>${escapeHtml(selected.sourceType || "Unknown")}</span>
+      <span>${escapeHtml(selected.model || "Unknown")}</span>
+      <span>${escapeHtml(selected.size || "未填写尺寸")}</span>
+      <span>${new Date(selected.createdAt).toLocaleDateString("zh-CN")}</span>
+    </div>
+    <div class="prompt-block">
+      <strong>Prompt</strong>
+      <p>${escapeHtml(selected.prompt || "未提取到 Prompt")}</p>
+    </div>
+    <div class="prompt-block">
+      <strong>Negative Prompt</strong>
+      <p>${escapeHtml(selected.negativePrompt || "未提取到 Negative Prompt")}</p>
+    </div>
+    <div class="prompt-block">
+      <strong>Tags</strong>
+      ${renderTagCloud(selected.tags)}
+    </div>
+    ${renderParameterGrid(selected)}
+    <p class="detail-copy">${escapeHtml(selected.notes || "暂无备注")}</p>
+    ${rawMetadataBlock}
+    ${workflowBlock}
+  `;
+}
+
+function render() {
+  renderStats();
+  renderTagFilters();
+  renderFilters();
+  renderGallery();
+  if (state.viewerOpen) {
+    renderDetail();
+    elements.viewerModal.hidden = false;
+  } else {
+    elements.viewerModal.hidden = true;
+  }
+  queueScrollbarMaskSync();
+}
+// END render.js
+
+// BEGIN controller.js
+function setImportStatus(message) {
+  elements.importStatus.textContent = message;
+}
+
+function resetDraftState() {
+  if (state.draftObjectUrl) {
+    URL.revokeObjectURL(state.draftObjectUrl);
+    state.draftObjectUrl = "";
+  }
+  state.draftBlob = null;
+  state.draftMetadata = null;
+}
+
+function refreshUploadPreview(image) {
+  if (image) {
+    elements.uploadPreview.style.backgroundImage = `url("${image}")`;
+    elements.uploadPreview.textContent = "";
+  } else {
+    elements.uploadPreview.style.backgroundImage = "";
+    elements.uploadPreview.textContent = "暂无预览";
+  }
+}
+
+function populateForm(item) {
+  if (!item) {
+    elements.formHeading.textContent = "新增作品";
+    elements.entryId.value = "";
+    elements.entryForm.reset();
+    resetDraftState();
+    refreshUploadPreview("");
+    return;
+  }
+
+  elements.formHeading.textContent = "编辑作品";
+  elements.entryId.value = item.id;
+  elements.titleInput.value = item.title;
+  elements.imageUrlInput.value = item.imageBlob ? "" : item.image;
+  elements.promptInput.value = item.prompt;
+  elements.negativePromptInput.value = item.negativePrompt;
+  elements.modelInput.value = item.model === "Unknown" ? "" : item.model;
+  elements.sizeInput.value = item.size;
+  elements.tagsInput.value = item.tags.join(", ");
+  elements.notesInput.value = item.notes;
+  resetDraftState();
+  state.draftBlob = item.imageBlob || null;
+  state.draftMetadata = item;
+  refreshUploadPreview(item.image);
+}
+
+function openViewer(id) {
+  if (id) {
+    state.selectedId = id;
+  }
+  if (!state.selectedId) {
+    return;
+  }
+  state.viewerOpen = true;
+  elements.viewerModal.hidden = false;
+  document.body.style.overflow = "hidden";
+  render();
+}
+
+function closeViewer() {
+  state.viewerOpen = false;
+  elements.viewerModal.hidden = true;
+  document.body.style.overflow = state.editorOpen ? "hidden" : "";
+  queueScrollbarMaskSync();
+}
+
+function openEditor(item = null) {
+  state.editorOpen = true;
+  elements.editorPanel.hidden = false;
+  document.body.style.overflow = "hidden";
+  populateForm(item);
+  queueScrollbarMaskSync();
+}
+
+function closeEditor() {
+  state.editorOpen = false;
+  elements.editorPanel.hidden = true;
+  elements.entryForm.reset();
+  elements.entryId.value = "";
+  resetDraftState();
+  refreshUploadPreview("");
+  document.body.style.overflow = state.viewerOpen ? "hidden" : "";
+  queueScrollbarMaskSync();
 }
 
 async function upsertItem(item) {
@@ -1549,6 +1639,8 @@ async function clearGallery() {
 }
 
 function bindEvents() {
+  setOpenViewerHandler(openViewer);
+
   elements.searchInput.addEventListener("input", (event) => {
     state.searchQuery = event.target.value;
     render();
@@ -1661,8 +1753,9 @@ function bindEvents() {
       }
     }
   });
+  window.addEventListener("resize", queueScrollbarMaskSync);
   window.addEventListener("beforeunload", () => {
-    objectUrlMap.forEach((url) => URL.revokeObjectURL(url));
+    revokeAllObjectUrls();
     if (state.draftObjectUrl) {
       URL.revokeObjectURL(state.draftObjectUrl);
     }
@@ -1675,6 +1768,7 @@ async function initializeApp() {
     await loadState();
     state.isInitialized = true;
     render();
+    queueScrollbarMaskSync();
     setImportStatus(`支持批量导入 ComfyUI / SD WebUI 图片。当前并发导入上限 ${IMPORT_CONCURRENCY}。`);
   } catch (error) {
     console.error(error);
@@ -1682,9 +1776,7 @@ async function initializeApp() {
   }
 }
 
-void initializeApp();
-
-window.promptManagerApp = {
+const publicApi = {
   createItemFromFile,
   extractMetadataFromImage,
   parseSdParameters,
@@ -1692,3 +1784,8 @@ window.promptManagerApp = {
   inferTags,
   IMPORT_CONCURRENCY,
 };
+// END controller.js
+
+window.promptManagerApp = publicApi;
+
+void initializeApp();
