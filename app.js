@@ -5,7 +5,7 @@ const STORE_NAME = "gallery_items";
 const STORAGE_KEY = "prompt-manager.gallery.v4";
 const METADATA_SLICE_BYTES = 1024 * 1024;
 const IMPORT_CONCURRENCY = Math.min(64, Math.max(8, (navigator.hardwareConcurrency || 8) * 2));
-const SCROLL_MASK_SELECTORS = [".workspace", ".tag-filter-scroll", ".viewer-media", ".viewer-info", ".editor-panel"];
+const SCROLL_MASK_SELECTORS = [];
 // END constants.js
 
 // BEGIN elements.js
@@ -26,6 +26,7 @@ const elements = {
   viewerModal: document.getElementById("viewerModal"),
   viewerBackdrop: document.getElementById("viewerBackdrop"),
   closeViewerButton: document.getElementById("closeViewerButton"),
+  copyImageButton: document.getElementById("copyImageButton"),
   previewImage: document.getElementById("previewImage"),
   detailPanel: document.getElementById("detailPanel"),
   favoriteToggleButton: document.getElementById("favoriteToggleButton"),
@@ -976,6 +977,7 @@ async function createItemFromFile(file) {
 
 // BEGIN render.js
 let openViewerHandler = () => {};
+const galleryNodeMap = new Map();
 
 function setOpenViewerHandler(handler) {
   openViewerHandler = typeof handler === "function" ? handler : () => {};
@@ -1118,6 +1120,7 @@ function renderStats() {
 function renderGallery() {
   const filteredItems = getFilteredItems();
   elements.galleryGrid.innerHTML = "";
+  galleryNodeMap.clear();
   elements.emptyState.hidden = filteredItems.length > 0;
   elements.resultSummary.textContent = `${filteredItems.length} 个结果`;
 
@@ -1136,8 +1139,16 @@ function renderGallery() {
     node.querySelector(".gallery-tags").textContent = item.tags.slice(0, 3).join(" · ") || "无 TAG";
     node.querySelector(".gallery-favorite").style.visibility = item.favorite ? "visible" : "hidden";
     node.addEventListener("click", () => openViewerHandler(item.id));
+    galleryNodeMap.set(item.id, node);
     elements.galleryGrid.appendChild(node);
   });
+}
+
+function syncGallerySelection(previousId = null) {
+  if (previousId && previousId !== state.selectedId) {
+    galleryNodeMap.get(previousId)?.classList.remove("selected");
+  }
+  galleryNodeMap.get(state.selectedId)?.classList.add("selected");
 }
 
 function renderTagCloud(tags) {
@@ -1172,17 +1183,54 @@ function renderParameterGrid(item) {
     .join("")}</div>`;
 }
 
+function renderPromptBlock(label, value, fallback, copyType) {
+  const displayValue = value || fallback;
+  const copyDisabled = value ? "" : " disabled";
+  const copyLabel = `复制 ${label}`;
+  return `
+    <div class="prompt-block">
+      <div class="prompt-block-head">
+        <strong>${escapeHtml(label)}</strong>
+        <button class="detail-copy-button" type="button" data-copy-detail="${copyType}" aria-label="${escapeHtml(copyLabel)}" title="${escapeHtml(copyLabel)}"${copyDisabled}>
+          <svg class="detail-copy-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M8 8.5h9.5v9.5H8z" />
+            <path d="M5.5 15.5V5.5h10" />
+          </svg>
+        </button>
+      </div>
+      <p>${escapeHtml(displayValue)}</p>
+    </div>
+  `;
+}
+
+function bindDetailCopyButtons() {
+  elements.detailPanel.querySelectorAll("[data-copy-detail]").forEach((copyButton) => {
+    copyButton.addEventListener("click", () => {
+      const copyType = copyButton.dataset.copyDetail;
+      const label = copyType === "negativePrompt" ? "Negative Prompt" : "Prompt";
+      void copyTextToClipboard(getDetailCopyText(copyType), label);
+    });
+  });
+}
+
 function renderDetail() {
   const selected = getSelectedItem();
   if (!selected) {
     elements.previewImage.style.backgroundImage = "";
     elements.detailPanel.innerHTML = '<p class="detail-copy">请选择一张图片查看详情。</p>';
     elements.favoriteToggleButton.disabled = true;
+    elements.copyImageButton.disabled = true;
+    elements.favoriteToggleButton.classList.remove("is-active");
+    elements.favoriteToggleButton.setAttribute("aria-label", "收藏");
+    elements.favoriteToggleButton.title = "收藏";
     return;
   }
 
   elements.favoriteToggleButton.disabled = false;
-  elements.favoriteToggleButton.textContent = selected.favorite ? "取消收藏" : "收藏";
+  elements.copyImageButton.disabled = !selected.image;
+  elements.favoriteToggleButton.classList.toggle("is-active", selected.favorite);
+  elements.favoriteToggleButton.setAttribute("aria-label", selected.favorite ? "取消收藏" : "收藏");
+  elements.favoriteToggleButton.title = selected.favorite ? "取消收藏" : "收藏";
   elements.previewImage.style.backgroundImage = selected.image ? `url("${selected.image}")` : "";
 
   const rawMetadataBlock = selected.metadataRaw
@@ -1211,14 +1259,8 @@ function renderDetail() {
       <span>${escapeHtml(selected.size || "未填写尺寸")}</span>
       <span>${new Date(selected.createdAt).toLocaleDateString("zh-CN")}</span>
     </div>
-    <div class="prompt-block">
-      <strong>Prompt</strong>
-      <p>${escapeHtml(selected.prompt || "未提取到 Prompt")}</p>
-    </div>
-    <div class="prompt-block">
-      <strong>Negative Prompt</strong>
-      <p>${escapeHtml(selected.negativePrompt || "未提取到 Negative Prompt")}</p>
-    </div>
+    ${renderPromptBlock("Prompt", selected.prompt, "未提取到 Prompt", "prompt")}
+    ${renderPromptBlock("Negative Prompt", selected.negativePrompt, "未提取到 Negative Prompt", "negativePrompt")}
     <div class="prompt-block">
       <strong>Tags</strong>
       ${renderTagCloud(selected.tags)}
@@ -1228,13 +1270,10 @@ function renderDetail() {
     ${rawMetadataBlock}
     ${workflowBlock}
   `;
+  bindDetailCopyButtons();
 }
 
-function render() {
-  renderStats();
-  renderTagFilters();
-  renderFilters();
-  renderGallery();
+function renderViewer() {
   if (state.viewerOpen) {
     renderDetail();
     elements.viewerModal.hidden = false;
@@ -1242,6 +1281,14 @@ function render() {
     elements.viewerModal.hidden = true;
   }
   queueScrollbarMaskSync();
+}
+
+function render() {
+  renderStats();
+  renderTagFilters();
+  renderFilters();
+  renderGallery();
+  renderViewer();
 }
 // END render.js
 
@@ -1296,6 +1343,7 @@ function populateForm(item) {
 }
 
 function openViewer(id) {
+  const previousId = state.selectedId;
   if (id) {
     state.selectedId = id;
   }
@@ -1303,9 +1351,9 @@ function openViewer(id) {
     return;
   }
   state.viewerOpen = true;
-  elements.viewerModal.hidden = false;
   document.body.style.overflow = "hidden";
-  render();
+  syncGallerySelection(previousId);
+  renderViewer();
 }
 
 function closeViewer() {
@@ -1496,6 +1544,131 @@ async function toggleFavorite() {
   render();
 }
 
+function getDetailCopyText(copyType) {
+  const selected = getSelectedItem();
+  if (!selected) {
+    return "";
+  }
+  if (copyType === "negativePrompt") {
+    return selected.negativePrompt || "";
+  }
+  return selected.prompt || "";
+}
+
+async function copyTextToClipboard(text, label) {
+  if (!text) {
+    window.alert(`${label} 为空，暂无可复制内容。`);
+    return;
+  }
+
+  try {
+    let copied = false;
+    if (navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(text);
+        copied = true;
+      } catch (error) {
+        console.warn("Clipboard API text copy failed, falling back to textarea copy.", error);
+      }
+    }
+
+    if (!copied) {
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.setAttribute("readonly", "");
+      textarea.style.position = "fixed";
+      textarea.style.left = "-9999px";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      copied = document.execCommand("copy");
+      textarea.remove();
+    }
+
+    if (!copied) {
+      throw new Error("复制命令未成功执行");
+    }
+    setImportStatus(`已复制 ${label}。`);
+  } catch (error) {
+    console.error(error);
+    window.alert(`复制 ${label} 失败，请手动选中文本复制。`);
+  }
+}
+
+function loadImageElement(source) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("图片加载失败"));
+    if (/^https?:\/\//i.test(source)) {
+      image.crossOrigin = "anonymous";
+    }
+    image.src = source;
+  });
+}
+
+function canvasToBlob(canvas, type = "image/png") {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) {
+        resolve(blob);
+      } else {
+        reject(new Error("图片转换失败"));
+      }
+    }, type);
+  });
+}
+
+async function createClipboardImageBlob(item) {
+  let source = item.image;
+  let objectUrl = "";
+  if (item.imageBlob) {
+    objectUrl = URL.createObjectURL(item.imageBlob);
+    source = objectUrl;
+  }
+
+  try {
+    const image = await loadImageElement(source);
+    const width = image.naturalWidth || image.width;
+    const height = image.naturalHeight || image.height;
+    if (!width || !height) {
+      throw new Error("图片尺寸无效");
+    }
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d");
+    context.drawImage(image, 0, 0, width, height);
+    return await canvasToBlob(canvas);
+  } finally {
+    if (objectUrl) {
+      URL.revokeObjectURL(objectUrl);
+    }
+  }
+}
+
+async function copySelectedImage() {
+  const selected = getSelectedItem();
+  if (!selected?.image) {
+    window.alert("当前没有可复制的图片。");
+    return;
+  }
+  if (!navigator.clipboard?.write || typeof ClipboardItem === "undefined") {
+    window.alert("当前浏览器不支持复制图片到剪贴板。");
+    return;
+  }
+
+  try {
+    const pngBlob = await createClipboardImageBlob(selected);
+    await navigator.clipboard.write([new ClipboardItem({ [pngBlob.type]: pngBlob })]);
+    setImportStatus("已复制图片。");
+  } catch (error) {
+    console.error(error);
+    window.alert("复制图片失败：如果是远程图片，可能需要允许跨域访问。");
+  }
+}
+
 function editSelected() {
   const selected = getSelectedItem();
   if (!selected) {
@@ -1681,6 +1854,9 @@ function bindEvents() {
 
   elements.favoriteToggleButton.addEventListener("click", () => {
     void toggleFavorite();
+  });
+  elements.copyImageButton.addEventListener("click", () => {
+    void copySelectedImage();
   });
   elements.editSelectedButton.addEventListener("click", editSelected);
   elements.duplicateButton.addEventListener("click", () => {

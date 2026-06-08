@@ -60,7 +60,7 @@
           <div class="section-head">
             <span>数据操作</span>
           </div>
-          <div class="stack-actions">
+          <div class="stack-actions data-actions">
             <button id="bulkImportButton" class="primary-button" type="button">
               导入 AI 图片
             </button>
@@ -247,11 +247,21 @@
               <strong>图片信息</strong>
             </div>
             <div class="viewer-head-actions">
-              <button id="favoriteToggleButton" class="ghost-button" type="button">
-                收藏
+              <button id="copyImageButton" class="viewer-icon-button" type="button" aria-label="复制图片" title="复制图片">
+                <svg class="viewer-action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M8 8.5h9.5v9.5H8z" />
+                  <path d="M5.5 15.5V5.5h10" />
+                </svg>
               </button>
-              <button id="closeViewerButton" class="viewer-close" type="button" aria-label="关闭详情">
-                ×
+              <button id="favoriteToggleButton" class="viewer-icon-button viewer-favorite-button" type="button" aria-label="收藏" title="收藏">
+                <svg class="viewer-action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 3.5l2.7 5.5 6.1.9-4.4 4.3 1 6.1L12 17.4l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9L12 3.5z" />
+                </svg>
+              </button>
+              <button id="closeViewerButton" class="viewer-icon-button viewer-close" type="button" aria-label="关闭详情" title="关闭详情">
+                <svg class="viewer-action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M6.5 6.5l11 11M17.5 6.5l-11 11" />
+                </svg>
               </button>
             </div>
           </div>
