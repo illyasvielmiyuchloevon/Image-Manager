@@ -33,3 +33,9 @@ python -m http.server 4173
 ```
 
 然后访问 `http://localhost:4173`。
+
+## 代码结构
+
+- `index.html`: 页面结构与脚本加载顺序
+- `styles.css`: 全局视觉与布局样式
+- `src/`: 应用源码，按配置、状态、数据库、元数据解析、渲染和控制器拆分

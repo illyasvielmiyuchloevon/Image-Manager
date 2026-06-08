@@ -156,7 +156,7 @@ button {
 .app-shell {
   position: relative;
   display: grid;
-  grid-template-columns: 320px minmax(0, 1fr) 320px;
+  grid-template-columns: 320px minmax(0, 1fr) 360px;
   gap: 0;
   height: 100vh;
   padding: 18px;
@@ -375,6 +375,7 @@ button {
   background: rgba(255, 255, 255, 0.55);
   padding: 8px 11px;
   color: var(--ink);
+  font-size: 0.88rem;
   transition:
     background 160ms ease,
     border-color 160ms ease,
@@ -1085,7 +1086,7 @@ button {
 
 @media (max-width: 1240px) {
   .app-shell {
-    grid-template-columns: 280px minmax(0, 1fr) 280px;
+    grid-template-columns: 280px minmax(0, 1fr) 300px;
   }
 
   .gallery-grid {
