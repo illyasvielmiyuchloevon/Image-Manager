@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Prompt Manager</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Space+Grotesk:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand-block">
+          <p class="eyebrow">AI Asset System</p>
+          <h1>Prompt Manager</h1>
+          <p class="brand-copy">
+            读取并展示 ComfyUI 与 SD WebUI 图片、Prompt、参数和 TAG。
+          </p>
+        </div>
+
+        <section class="sidebar-section">
+          <label class="field-label" for="searchInput">搜索图库</label>
+          <input
+            id="searchInput"
+            class="search-input"
+            type="search"
+            placeholder="标题、Prompt、标签、模型"
+          />
+        </section>
+
+        <section class="sidebar-section">
+          <div class="section-head">
+            <span>资产概览</span>
+            <button id="newEntryButton" class="ghost-button" type="button">
+              手动录入
+            </button>
+          </div>
+          <div class="metric-list">
+            <div>
+              <span class="metric-label">图片总数</span>
+              <strong id="assetCount">0</strong>
+            </div>
+            <div>
+              <span class="metric-label">收藏作品</span>
+              <strong id="favoriteCount">0</strong>
+            </div>
+            <div>
+              <span class="metric-label">模型种类</span>
+              <strong id="modelCount">0</strong>
+            </div>
+          </div>
+        </section>
+
+        <section class="sidebar-section">
+          <div class="section-head">
+            <span>数据操作</span>
+          </div>
+          <div class="stack-actions">
+            <button id="bulkImportButton" class="primary-button" type="button">
+              导入 AI 图片
+            </button>
+            <button id="folderImportButton" class="secondary-button" type="button">
+              导入图库文件夹
+            </button>
+            <button id="exportButton" class="primary-button" type="button">
+              导出 JSON
+            </button>
+            <button id="importButton" class="secondary-button" type="button">
+              导入 JSON
+            </button>
+            <button id="resetDemoButton" class="ghost-button danger" type="button">
+              清空图库
+            </button>
+            <input
+              id="bulkImageInput"
+              type="file"
+              accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp"
+              multiple
+              hidden
+            />
+            <input
+              id="folderImageInput"
+              type="file"
+              accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp"
+              webkitdirectory
+              multiple
+              hidden
+            />
+            <input id="importInput" type="file" accept="application/json" hidden />
+          </div>
+          <p id="importStatus" class="status-note">
+            支持批量导入包含元数据的 ComfyUI / SD WebUI 图片。
+          </p>
+        </section>
+      </aside>
+
+      <main class="workspace">
+        <header class="workspace-header">
+          <div>
+            <p class="eyebrow">Gallery</p>
+            <h2>AI 图库</h2>
+          </div>
+
+          <div class="toolbar">
+            <label>
+              <span>来源</span>
+              <select id="sourceFilter">
+                <option value="all">全部来源</option>
+              </select>
+            </label>
+            <label>
+              <span>模型</span>
+              <select id="modelFilter"></select>
+            </label>
+            <label>
+              <span>收藏</span>
+              <select id="favoriteFilter">
+                <option value="all">全部</option>
+                <option value="favorites">仅收藏</option>
+                <option value="others">未收藏</option>
+              </select>
+            </label>
+            <label>
+              <span>排序</span>
+              <select id="sortFilter">
+                <option value="newest">最新优先</option>
+                <option value="oldest">最早优先</option>
+                <option value="favorites">收藏优先</option>
+                <option value="title">标题 A-Z</option>
+              </select>
+            </label>
+          </div>
+        </header>
+
+        <section class="gallery-summary">
+          <p id="resultSummary">0 个结果</p>
+          <div class="divider"></div>
+          <p>点击图片查看 Prompt、TAG、工作流参数和来源信息。</p>
+        </section>
+
+        <section id="galleryGrid" class="gallery-grid" aria-live="polite"></section>
+        <section id="emptyState" class="empty-state" hidden>
+          <p>图库还是空的，先导入一批 ComfyUI 或 SD WebUI 图片试试。</p>
+        </section>
+      </main>
+
+      <aside class="filter-rail">
+        <div class="section-head">
+          <span>TAG 筛选</span>
+          <button id="clearFiltersButton" class="ghost-button" type="button">
+            清空
+          </button>
+        </div>
+        <p class="status-note">右侧 TAG 区支持独立滚动，不会带动整页一起滚动。</p>
+        <div class="tag-filter-scroll">
+          <div id="tagFilters" class="chip-wrap"></div>
+        </div>
+      </aside>
+    </div>
+
+    <section id="editorPanel" class="editor-drawer" hidden>
+      <div class="editor-panel">
+        <div class="section-head">
+          <span id="formHeading">新增作品</span>
+          <button id="cancelEditButton" class="ghost-button" type="button">
+            取消编辑
+          </button>
+        </div>
+
+        <form id="entryForm" class="entry-form">
+          <input id="entryId" type="hidden" />
+
+          <label>
+            <span>标题</span>
+            <input id="titleInput" name="title" type="text" maxlength="80" required />
+          </label>
+
+          <label>
+            <span>图片 URL</span>
+            <input id="imageUrlInput" name="imageUrl" type="url" placeholder="https://..." />
+          </label>
+
+          <label class="upload-zone" for="imageUploadInput">
+            <span>上传图片并自动识别</span>
+            <small>可用来替换当前图片，并自动提取 ComfyUI / SD WebUI 元数据</small>
+            <input id="imageUploadInput" name="imageUpload" type="file" accept="image/*" />
+          </label>
+
+          <div id="uploadPreview" class="upload-preview">暂无预览</div>
+
+          <label>
+            <span>正向 Prompt</span>
+            <textarea id="promptInput" name="prompt" rows="5"></textarea>
+          </label>
+
+          <label>
+            <span>反向 Prompt</span>
+            <textarea id="negativePromptInput" name="negativePrompt" rows="3"></textarea>
+          </label>
+
+          <div class="two-column">
+            <label>
+              <span>模型</span>
+              <input id="modelInput" name="model" type="text" placeholder="Checkpoint / Model name" />
+            </label>
+            <label>
+              <span>尺寸</span>
+              <input id="sizeInput" name="size" type="text" placeholder="1536x1024" />
+            </label>
+          </div>
+
+          <label>
+            <span>标签</span>
+            <input id="tagsInput" name="tags" type="text" placeholder="portrait, cinematic, neon" />
+          </label>
+
+          <label>
+            <span>备注</span>
+            <textarea id="notesInput" name="notes" rows="3"></textarea>
+          </label>
+
+          <div class="form-actions">
+            <button class="primary-button" type="submit">保存作品</button>
+            <button id="clearFormButton" class="ghost-button" type="button">
+              清空表单
+            </button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <section id="viewerModal" class="viewer-modal" hidden>
+      <div id="viewerBackdrop" class="viewer-backdrop"></div>
+      <div class="viewer-dialog" role="dialog" aria-modal="true" aria-labelledby="viewerTitle">
+        <div class="viewer-media">
+          <div id="previewImage" class="preview-image"></div>
+        </div>
+        <div class="viewer-info">
+          <div class="section-head viewer-head">
+            <div class="viewer-head-copy">
+              <p class="eyebrow">Inspector</p>
+              <strong>图片信息</strong>
+            </div>
+            <div class="viewer-head-actions">
+              <button id="favoriteToggleButton" class="ghost-button" type="button">
+                收藏
+              </button>
+              <button id="closeViewerButton" class="viewer-close" type="button" aria-label="关闭详情">
+                ×
+              </button>
+            </div>
+          </div>
+          <div id="detailPanel" class="detail-panel"></div>
+          <div class="stack-actions inline-actions">
+            <button id="editSelectedButton" class="secondary-button" type="button">
+              编辑当前
+            </button>
+            <button id="duplicateButton" class="ghost-button" type="button">
+              复制一份
+            </button>
+            <button id="deleteButton" class="ghost-button danger" type="button">
+              删除
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <template id="galleryItemTemplate">
+      <button class="gallery-item" type="button">
+        <span class="gallery-thumb"></span>
+        <span class="gallery-overlay">
+          <span class="gallery-topline">
+            <span class="gallery-model"></span>
+            <span class="gallery-favorite">★</span>
+          </span>
+          <strong class="gallery-title"></strong>
+          <span class="gallery-tags"></span>
+        </span>
+      </button>
+    </template>
+
+    <script src="app.js"></script>
+  </body>
+</html>
