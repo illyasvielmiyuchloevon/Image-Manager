@@ -552,7 +552,7 @@ button {
   text-align: left;
   transform: translateY(0);
   opacity: 1;
-  cursor: zoom-in;
+  cursor: pointer;
   animation: tile-in 0.55s ease backwards;
   animation-delay: var(--delay, 0ms);
   transition:
@@ -656,7 +656,7 @@ button {
   overflow: hidden;
   background-size: contain;
   background-repeat: no-repeat;
-  cursor: zoom-in;
+  cursor: default;
   touch-action: none;
 }
 
