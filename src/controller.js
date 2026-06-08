@@ -64,6 +64,9 @@ function openViewer(id) {
 
 function closeViewer() {
   state.viewerOpen = false;
+  if (typeof resetViewerZoom === "function") {
+    resetViewerZoom();
+  }
   elements.viewerModal.hidden = true;
   document.body.style.overflow = state.editorOpen ? "hidden" : "";
   queueScrollbarMaskSync();
@@ -522,6 +525,9 @@ function bindEvents() {
   setDetailCopyHandler((copyType, label) => {
     void copyTextToClipboard(getDetailCopyText(copyType), label);
   });
+  if (typeof initViewerZoom === "function") {
+    initViewerZoom();
+  }
 
   elements.searchInput.addEventListener("input", (event) => {
     state.searchQuery = event.target.value;

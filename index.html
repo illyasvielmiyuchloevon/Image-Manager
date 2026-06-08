@@ -238,7 +238,10 @@
       <div id="viewerBackdrop" class="viewer-backdrop"></div>
       <div class="viewer-dialog" role="dialog" aria-modal="true" aria-labelledby="viewerTitle">
         <div class="viewer-media">
-          <div id="previewImage" class="preview-image"></div>
+          <div id="previewImage" class="preview-image is-empty">
+            <img id="previewZoomImage" class="viewer-zoom-image" alt="" draggable="false" />
+            <span id="viewerZoomHint" class="viewer-zoom-hint">滚轮缩放 · 拖拽移动 · 双击 2x/复位</span>
+          </div>
         </div>
         <div class="viewer-info">
           <div class="section-head viewer-head">
@@ -304,6 +307,7 @@
     <script src="src/utils.js"></script>
     <script src="src/database.js"></script>
     <script src="src/metadata.js"></script>
+    <script src="src/viewer-zoom.js"></script>
     <script src="src/render.js"></script>
     <script src="src/controller.js"></script>
     <script src="src/main.js"></script>

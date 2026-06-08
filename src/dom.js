@@ -17,6 +17,8 @@ const elements = {
   closeViewerButton: document.getElementById("closeViewerButton"),
   copyImageButton: document.getElementById("copyImageButton"),
   previewImage: document.getElementById("previewImage"),
+  previewZoomImage: document.getElementById("previewZoomImage"),
+  viewerZoomHint: document.getElementById("viewerZoomHint"),
   detailPanel: document.getElementById("detailPanel"),
   favoriteToggleButton: document.getElementById("favoriteToggleButton"),
   editSelectedButton: document.getElementById("editSelectedButton"),

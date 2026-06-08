@@ -241,10 +241,18 @@ function bindDetailCopyButtons() {
   });
 }
 
+function setDetailPreviewImage(image) {
+  if (typeof setViewerZoomImage === "function") {
+    setViewerZoomImage(image || "");
+    return;
+  }
+  elements.previewImage.style.backgroundImage = image ? `url("${image}")` : "";
+}
+
 function renderDetail() {
   const selected = getSelectedItem();
   if (!selected) {
-    elements.previewImage.style.backgroundImage = "";
+    setDetailPreviewImage("");
     elements.detailPanel.innerHTML = '<p class="detail-copy">请选择一张图片查看详情。</p>';
     elements.favoriteToggleButton.disabled = true;
     elements.copyImageButton.disabled = true;
@@ -259,7 +267,7 @@ function renderDetail() {
   elements.favoriteToggleButton.classList.toggle("is-active", selected.favorite);
   elements.favoriteToggleButton.setAttribute("aria-label", selected.favorite ? "取消收藏" : "收藏");
   elements.favoriteToggleButton.title = selected.favorite ? "取消收藏" : "收藏";
-  elements.previewImage.style.backgroundImage = selected.image ? `url("${selected.image}")` : "";
+  setDetailPreviewImage(selected.image);
 
   const rawMetadataBlock = selected.metadataRaw
     ? `
