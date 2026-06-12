@@ -15,6 +15,7 @@ const viewerZoomState = {
   startX: 0,
   startY: 0,
 };
+let viewerZoomFrame = 0;
 
 function clampViewerZoom(value, min, max) {
   return Math.min(Math.max(value, min), max);
@@ -57,7 +58,7 @@ function constrainViewerZoomPan() {
   viewerZoomState.y = clampViewerZoom(viewerZoomState.y, -bounds.maxY, bounds.maxY);
 }
 
-function applyViewerZoomTransform() {
+function applyViewerZoomTransformNow() {
   const stage = elements.previewImage;
   const image = elements.previewZoomImage;
   if (!stage || !image) {
@@ -71,6 +72,17 @@ function applyViewerZoomTransform() {
   stage.classList.toggle("is-zoomed", scale > VIEWER_ZOOM_MIN);
   stage.classList.toggle("is-dragging", viewerZoomState.isDragging);
   stage.classList.toggle("is-empty", !viewerZoomState.src);
+}
+
+function applyViewerZoomTransform() {
+  if (viewerZoomFrame) {
+    return;
+  }
+
+  viewerZoomFrame = window.requestAnimationFrame(() => {
+    viewerZoomFrame = 0;
+    applyViewerZoomTransformNow();
+  });
 }
 
 function resetViewerZoom() {

@@ -6,6 +6,7 @@ const elements = {
   tagFilters: document.getElementById("tagFilters"),
   clearFiltersButton: document.getElementById("clearFiltersButton"),
   sourceFilter: document.getElementById("sourceFilter"),
+  folderFilter: document.getElementById("folderFilter"),
   modelFilter: document.getElementById("modelFilter"),
   favoriteFilter: document.getElementById("favoriteFilter"),
   sortFilter: document.getElementById("sortFilter"),
@@ -44,6 +45,7 @@ const elements = {
   bulkImportButton: document.getElementById("bulkImportButton"),
   bulkImageInput: document.getElementById("bulkImageInput"),
   folderImportButton: document.getElementById("folderImportButton"),
+  syncLibraryButton: document.getElementById("syncLibraryButton"),
   folderImageInput: document.getElementById("folderImageInput"),
   exportButton: document.getElementById("exportButton"),
   importButton: document.getElementById("importButton"),
@@ -51,5 +53,6 @@ const elements = {
   importStatus: document.getElementById("importStatus"),
   resetDemoButton: document.getElementById("resetDemoButton"),
   galleryItemTemplate: document.getElementById("galleryItemTemplate"),
+  dropOverlay: document.getElementById("dropOverlay"),
 };
 

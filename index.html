@@ -19,7 +19,7 @@
           <p class="eyebrow">AI Asset System</p>
           <h1>Prompt Manager</h1>
           <p class="brand-copy">
-            读取并展示 ComfyUI 与 SD WebUI 图片、Prompt、参数和 TAG。
+            读取并展示 ComfyUI、SD WebUI、NovelAI 与 OpenAI 图片、Prompt、参数和 TAG。
           </p>
         </div>
 
@@ -29,7 +29,7 @@
             id="searchInput"
             class="search-input"
             type="search"
-            placeholder="标题、Prompt、标签、模型"
+            placeholder="标题、路径、Prompt、标签、模型"
           />
         </section>
 
@@ -50,7 +50,7 @@
               <strong id="favoriteCount">0</strong>
             </div>
             <div>
-              <span class="metric-label">模型种类</span>
+              <span class="metric-label">文件夹数</span>
               <strong id="modelCount">0</strong>
             </div>
           </div>
@@ -65,7 +65,10 @@
               导入 AI 图片
             </button>
             <button id="folderImportButton" class="secondary-button" type="button">
-              导入图库文件夹
+              添加本地文件夹
+            </button>
+            <button id="syncLibraryButton" class="secondary-button" type="button">
+              同步图库
             </button>
             <button id="exportButton" class="primary-button" type="button">
               导出 JSON
@@ -94,7 +97,7 @@
             <input id="importInput" type="file" accept="application/json" hidden />
           </div>
           <p id="importStatus" class="status-note">
-            支持批量导入包含元数据的 ComfyUI / SD WebUI 图片。
+            支持批量导入包含元数据的 ComfyUI / SD WebUI / NovelAI / OpenAI 图片。
           </p>
         </section>
       </aside>
@@ -111,6 +114,12 @@
               <span>来源</span>
               <select id="sourceFilter">
                 <option value="all">全部来源</option>
+              </select>
+            </label>
+            <label>
+              <span>文件夹</span>
+              <select id="folderFilter">
+                <option value="all">全部文件夹</option>
               </select>
             </label>
             <label>
@@ -145,7 +154,7 @@
 
         <section id="galleryGrid" class="gallery-grid" aria-live="polite"></section>
         <section id="emptyState" class="empty-state" hidden>
-          <p>图库还是空的，先导入一批 ComfyUI 或 SD WebUI 图片试试。</p>
+          <p>图库还是空的，先导入一批 ComfyUI、SD WebUI、NovelAI 或 OpenAI 图片试试。</p>
         </section>
       </main>
 
@@ -187,7 +196,7 @@
 
           <label class="upload-zone" for="imageUploadInput">
             <span>上传图片并自动识别</span>
-            <small>可用来替换当前图片，并自动提取 ComfyUI / SD WebUI 元数据</small>
+            <small>可用来替换当前图片，并自动提取 ComfyUI / SD WebUI / NovelAI / OpenAI 元数据</small>
             <input id="imageUploadInput" name="imageUpload" type="file" accept="image/*" />
           </label>
 
@@ -233,6 +242,13 @@
         </form>
       </div>
     </section>
+
+    <div id="dropOverlay" class="drop-overlay" hidden>
+      <div>
+        <strong>拖放导入</strong>
+        <span>释放图片或文件夹以加入本地图库</span>
+      </div>
+    </div>
 
     <section id="viewerModal" class="viewer-modal" hidden>
       <div id="viewerBackdrop" class="viewer-backdrop"></div>
@@ -286,7 +302,9 @@
 
     <template id="galleryItemTemplate">
       <button class="gallery-item" type="button">
-        <span class="gallery-thumb"></span>
+        <span class="gallery-thumb">
+          <img class="gallery-thumb-image" loading="lazy" decoding="async" fetchpriority="low" alt="" />
+        </span>
         <span class="gallery-overlay">
           <span class="gallery-topline">
             <span class="gallery-model"></span>
@@ -305,7 +323,15 @@
     <script src="src/scrollbar.js"></script>
     <script src="src/items.js"></script>
     <script src="src/utils.js"></script>
+    <script src="src/thumbnails.js"></script>
     <script src="src/database.js"></script>
+    <script src="src/metadata-core.js"></script>
+    <script src="src/metadata-png.js"></script>
+    <script src="src/metadata-sd-webui.js"></script>
+    <script src="src/metadata-comfyui.js"></script>
+    <script src="src/metadata-novelai.js"></script>
+    <script src="src/metadata-openai.js"></script>
+    <script src="src/metadata-exif.js"></script>
     <script src="src/metadata.js"></script>
     <script src="src/viewer-zoom.js"></script>
     <script src="src/render.js"></script>

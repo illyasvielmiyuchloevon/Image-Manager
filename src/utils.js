@@ -17,10 +17,17 @@ function escapeHtml(text) {
     .replaceAll("'", "&#39;");
 }
 
+function yieldToMainThread() {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, 0);
+  });
+}
+
 async function mapConcurrent(items, limit, mapper, onProgress) {
   const results = new Array(items.length);
   let index = 0;
   let completed = 0;
+  const yieldInterval = Math.max(limit * 2, 1);
 
   async function worker() {
     while (true) {
@@ -33,6 +40,9 @@ async function mapConcurrent(items, limit, mapper, onProgress) {
       completed += 1;
       if (onProgress) {
         onProgress(completed, items.length);
+      }
+      if (completed % yieldInterval === 0) {
+        await yieldToMainThread();
       }
     }
   }

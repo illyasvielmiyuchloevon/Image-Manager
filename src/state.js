@@ -4,6 +4,7 @@ const state = {
   activeTag: "all",
   searchQuery: "",
   sourceFilter: "all",
+  folderFilter: "all",
   favoriteFilter: "all",
   modelFilter: "all",
   sortOrder: "newest",
@@ -12,6 +13,9 @@ const state = {
   draftObjectUrl: "",
   draftBlob: null,
   draftMetadata: null,
+  draftVersion: 0,
   isInitialized: false,
+  libraryRoots: [],
+  isDraggingFiles: false,
 };
 
