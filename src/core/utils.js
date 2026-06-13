@@ -17,6 +17,11 @@ function escapeHtml(text) {
     .replaceAll("'", "&#39;");
 }
 
+function getPersistableImageUrl(value) {
+  const url = typeof value === "string" ? value.trim() : "";
+  return url && !url.startsWith("blob:") ? url : "";
+}
+
 function yieldToMainThread() {
   return new Promise((resolve) => {
     window.setTimeout(resolve, 0);

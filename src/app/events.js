@@ -170,6 +170,7 @@ function bindEvents() {
     setDropOverlayVisible(false);
     void handleDropImport(event.dataTransfer);
   });
+  window.addEventListener("paste", handlePasteImport);
   window.addEventListener("resize", queueScrollbarMaskSync);
   window.addEventListener("beforeunload", () => {
     revokeAllObjectUrls();

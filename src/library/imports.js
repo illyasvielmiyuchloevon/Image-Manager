@@ -264,6 +264,10 @@ async function createLibraryItemFromFile(file, options) {
     item.thumbnailMaxEdge = THUMBNAIL_MAX_EDGE;
     item.thumbnailImage = createThumbnailObjectUrl(item.id, thumbnailBlob);
   }
+  if (options?.persistBlob === false && item.image) {
+    revokeObjectUrl(item.id);
+    item.image = "";
+  }
   return item;
 }
 
@@ -309,9 +313,6 @@ async function scanLibraryRoot(root, options = {}) {
           previous.fileLastModified === file.lastModified &&
           hasCurrentThumbnail(previous)
         ) {
-          if (!previous.image) {
-            previous.image = createObjectUrl(previous.id, file);
-          }
           scannedItems[index] = previous;
           return previous;
         }
@@ -500,6 +501,77 @@ async function importDroppedFiles(files, options = {}) {
   if (skippedCount > 0) {
     setImportStatus(`${elements.importStatus.textContent} 已跳过 ${skippedCount} 个非图片文件。`);
   }
+}
+
+function getFileExtensionFromType(type) {
+  if (/jpe?g/i.test(type)) {
+    return "jpg";
+  }
+  if (/webp/i.test(type)) {
+    return "webp";
+  }
+  if (/gif/i.test(type)) {
+    return "gif";
+  }
+  return "png";
+}
+
+function normalizePastedImageFile(file, index) {
+  if (!(file instanceof Blob)) {
+    return null;
+  }
+
+  const type = file.type || "image/png";
+  const name = file.name && /\.[^.]+$/.test(file.name)
+    ? file.name
+    : `pasted-image-${new Date().toISOString().replace(/[:.]/g, "-")}-${index + 1}.${getFileExtensionFromType(type)}`;
+  return new File([file], name, {
+    type,
+    lastModified: file.lastModified || Date.now(),
+  });
+}
+
+function getClipboardImageFiles(dataTransfer) {
+  const itemFiles = Array.from(dataTransfer?.items || [])
+    .filter((item) => item.kind === "file" && item.type?.startsWith("image/"))
+    .map((item) => item.getAsFile())
+    .filter(Boolean);
+  const sourceFiles = itemFiles.length ? itemFiles : Array.from(dataTransfer?.files || []).filter(isSupportedImageFile);
+  return sourceFiles.map(normalizePastedImageFile).filter(Boolean);
+}
+
+async function importPastedImages(files) {
+  if (files.length === 0) {
+    return;
+  }
+
+  const root = getVirtualRoot(PASTED_ROOT_ID, "Pasted Images", "virtual");
+  await saveLibraryRoot(root);
+  await handleBulkImageImport(
+    {
+      target: {
+        files,
+        value: "",
+      },
+    },
+    {
+      sourceLabel: "粘贴图片",
+      rootId: root.id,
+      rootName: root.name,
+      storageMode: "blob",
+      persistBlob: true,
+    }
+  );
+}
+
+function handlePasteImport(event) {
+  const files = getClipboardImageFiles(event.clipboardData);
+  if (files.length === 0) {
+    return;
+  }
+
+  event.preventDefault();
+  void importPastedImages(files);
 }
 
 async function getDroppedHandles(dataTransfer) {

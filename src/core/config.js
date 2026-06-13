@@ -14,6 +14,7 @@ const GALLERY_ANIMATION_DELAY_STEP_MS = 8;
 const GALLERY_ANIMATION_DELAY_MAX_MS = 160;
 const LEGACY_ROOT_ID = "legacy-imports";
 const DROPPED_ROOT_ID = "dropped-files";
+const PASTED_ROOT_ID = "pasted-images";
 const SCROLL_MASK_SELECTORS = [];
 
 

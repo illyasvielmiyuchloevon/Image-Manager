@@ -51,6 +51,7 @@ function toDbRecord(item) {
     favorite: item.favorite,
     createdAt: item.createdAt,
     sourceType: item.sourceType,
+    image: getPersistableImageUrl(item.image),
     filename: item.filename,
     fileHash: item.fileHash,
     rootId: item.rootId,
@@ -80,7 +81,7 @@ function fromDbRecord(record) {
   const thumbnailBlob = storedThumbnailBlob && thumbnailMaxEdge === THUMBNAIL_MAX_EDGE ? storedThumbnailBlob : null;
   return normalizeItem({
     ...record,
-    image: imageBlob ? createObjectUrl(record.id, imageBlob) : "",
+    image: imageBlob ? createObjectUrl(record.id, imageBlob) : getPersistableImageUrl(record?.image),
     thumbnailImage: thumbnailBlob ? createThumbnailObjectUrl(record.id, thumbnailBlob) : "",
     imageBlob,
     thumbnailBlob,

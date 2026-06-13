@@ -11,6 +11,7 @@ async function exportJson() {
     favorite: item.favorite,
     createdAt: item.createdAt,
     sourceType: item.sourceType,
+    image: getPersistableImageUrl(item.image),
     filename: item.filename,
     fileHash: item.fileHash,
     rootId: item.rootId,
