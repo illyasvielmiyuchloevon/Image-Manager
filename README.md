@@ -45,14 +45,13 @@ python -m http.server 4173
 
 ## 代码结构
 
-- `index.html`: 页面结构与脚本加载顺序
+- `index.html`: 页面结构与普通脚本加载顺序
 - `styles.css`: 全局视觉与布局样式
-- `src/metadata.js`: 图片元数据统一入口与图库条目创建
-- `src/metadata-core.js`: 元数据解析共享工具
-- `src/metadata-png.js`: PNG 文本块读取
-- `src/metadata-comfyui.js`: ComfyUI `prompt` / `workflow` 解析
-- `src/metadata-sd-webui.js`: SD WebUI `parameters` 解析
-- `src/metadata-novelai.js`: NovelAI 常规 PNG 文本块与 alpha 通道 stealth metadata 解析
-- `src/metadata-openai.js`: OpenAI / GPT Image C2PA/provenance 来源标记识别
-- `src/metadata-exif.js`: JPEG / WebP EXIF 解析
-- `src/`: 应用源码，按配置、状态、数据库、元数据解析、渲染和控制器拆分
+- `src/core/`: 配置、状态、工具、对象 URL、缩略图
+- `src/data/`: 图库 item/root 标准化与 IndexedDB 持久化
+- `src/metadata/`: ComfyUI、SD WebUI、NovelAI、OpenAI、PNG/EXIF 解析链路
+- `src/library/`: 本地目录授权、扫描、同步、拖放和批量导入
+- `src/ui/`: DOM 引用、渲染、自定义下拉、viewer zoom、滚动条辅助
+- `src/app/`: editor/viewer 操作、事件绑定、启动和公开调试 API
+
+更多分层规则见 [src/README.md](./src/README.md)。
